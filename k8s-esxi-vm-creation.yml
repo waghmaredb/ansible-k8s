@@ -1,0 +1,50 @@
+---
+- name: Create a VM from a template
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+  
+  - import_playbook: vmware-env.yml #change your vmware environment details in this file
+  
+      
+  - name: deploy k8s master from template
+  vmware_guest:
+    hostname: "{{ vcenter_ip }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    validate_certs: False
+    datacenter: datacenter1
+    cluster: cluster
+    name: k8s-master
+    template: centos_linux_template #change to your template 
+    networks:
+    - name: VM Network #change network and IP details as per your vmware environment
+      ip: 192.168.1.100 
+      netmask: 255.255.255.0
+      gateway: 192.168.1.1
+      domain: "{{ domain }}"
+      dns_servers: "{{ dns_server }}"
+     # password: new_vm_password
+        delegate_to: localhost
+  
+  - name: deploy k8s worker from template
+  vmware_guest:
+    hostname: "{{ vcenter_ip }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    validate_certs: False
+    datacenter: datacenter1
+    cluster: cluster
+    name: k8s-node1
+    template: centos_linux_template #change to your template 
+    networks:
+    - name: VM Network #change network and IP details as per your vmware environment
+      ip: 192.168.1.100
+      netmask: 255.255.255.0
+      gateway: 192.168.1.1
+      domain: "{{ domain }}"
+      dns_servers: "{{ dns_server }}"
+     # password: new_vm_password
+        delegate_to: localhost
+     #deploy multiple workers as per your requirement   
