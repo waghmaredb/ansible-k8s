@@ -37,21 +37,21 @@ This ansible playbook will help you deploy entire K8S cluster with dependencies 
     #k8s_node8_ip: 192.168.1.108
 
 3. Edit /etc/ansible/hosts file and add below lines at the end. Make sure that you remove leading # and match PI address as per playbook variables 
-# [kube_cluster1]
-# k8s-master ansible_host=192.168.172.100 ansible_user=root
-# worker1 ansible_host=192.168.172.101 ansible_user=root
-# worker2 ansible_host=192.168.172.102 ansible_user=root
-# worker3 ansible_host=192.168.172.103 ansible_user=root
-# worker4 ansible_host=192.168.172.104 ansible_user=root
+    # [kube_cluster1]
+    # k8s-master ansible_host=192.168.172.100 ansible_user=root
+    # worker1 ansible_host=192.168.172.101 ansible_user=root
+    # worker2 ansible_host=192.168.172.102 ansible_user=root
+    # worker3 ansible_host=192.168.172.103 ansible_user=root
+    # worker4 ansible_host=192.168.172.104 ansible_user=root
 
-# [master]
-# k8s-master ansible_host=192.168.172.100 ansible_user=root
+    # [master]
+    # k8s-master ansible_host=192.168.172.100 ansible_user=root
 
-# [worker]
-# worker1 ansible_host=192.168.172.101 ansible_user=root
-# worker2 ansible_host=192.168.172.102 ansible_user=root
-# worker3 ansible_host=192.168.172.103 ansible_user=root
-# worker4 ansible_host=192.168.172.104 ansible_user=root
+    # [worker]
+    # worker1 ansible_host=192.168.172.101 ansible_user=root
+    # worker2 ansible_host=192.168.172.102 ansible_user=root
+    # worker3 ansible_host=192.168.172.103 ansible_user=root
+    # worker4 ansible_host=192.168.172.104 ansible_user=root
 
 4. Run k8s-deployment.yml playbook
 
