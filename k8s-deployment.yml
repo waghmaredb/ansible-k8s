@@ -1,0 +1,335 @@
+
+- hosts: all
+  become: yes
+  gather_facts: yes
+
+######################## Start of Variables ########################
+  vars:
+# common environment details
+    #ntp_server: ntp_server_ip
+    domain: "<DOMAIN NAME>"
+    dns_server: <DNS SERVER>
+
+# vmware environment details
+    vcenter_ip: <VCENTER SERVER>
+    vcenter_username: <USERNAME>
+    vcenter_password: <PASSWORD>
+    vmware_datacenter: <DATACENTER>
+    vmware_cluster: <CLUSTER>
+    vm_network: "<VM NETWORK>"
+    k8s_vm_folder: <VMFOLDER>
+    k8s_template_name: <K8S TEMPLATE NAME>
+
+# K8S environment details
+    k8s_master_ip: 192.168.172.100
+    k8s_network_netmask: 255.255.255.0
+    k8s_network_gateway: 192.168.172.1
+    k8s_node1_ip: 192.168.172.101
+    #k8s_node2_ip: 192.168.1.102
+    #k8s_node3_ip: 192.168.1.103
+    #k8s_node4_ip: 192.168.1.104
+    #k8s_node5_ip: 192.168.1.105
+    #k8s_node6_ip: 192.168.1.106
+    #k8s_node7_ip: 192.168.1.107
+    #k8s_node8_ip: 192.168.1.108
+########################
+#note that the Ansible inventory file is expected to be in below format 
+
+# [kube_cluster1]
+# k8s-master ansible_host=192.168.172.100 ansible_user=root
+# worker1 ansible_host=192.168.172.101 ansible_user=root
+# worker2 ansible_host=192.168.172.102 ansible_user=root
+# worker3 ansible_host=192.168.172.103 ansible_user=root
+# worker4 ansible_host=192.168.172.104 ansible_user=root
+
+# [master]
+# k8s-master ansible_host=192.168.172.100 ansible_user=root
+
+# [worker]
+# worker1 ansible_host=192.168.172.101 ansible_user=root
+# worker2 ansible_host=192.168.172.102 ansible_user=root
+# worker3 ansible_host=192.168.172.103 ansible_user=root
+# worker4 ansible_host=192.168.172.104 ansible_user=root
+########################
+
+# use if environment needs internet proxy
+# proxy_env:
+    #http_proxy: http://proxy.bos.example.com:8080
+    #https_proxy: http://proxy.bos.example.com:8080
+
+######################## End of Variables ########################
+
+
+######################## Start of VM Deployment Tasks ########################
+
+  tasks:
+
+# Deploy VM from template for K8S master 
+  - name: deploy k8s master from template
+    vmware_guest:
+      hostname: "{{ vcenter_ip }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      validate_certs: no
+      datacenter: "{{ vmware_datacenter }}"
+      cluster: "{{ vmware_cluster }}"
+      name: k8s-master
+      folder: "{{ k8s_vm_folder }}"
+      state: poweredon
+      template: "{{ k8s_template_name }}" 
+      networks:
+      - name: "{{ vm_network }}"
+        ip: "{{ k8s_master_ip }}" 
+        netmask: "{{ k8s_network_netmask }}"
+        gateway: "{{ k8s_network_gateway }}"
+        domain: "{{ domain }}"
+        dns_servers: 
+        - "{{ dns_server }}"
+      wait_for_ip_address: yes
+    delegate_to: localhost
+
+# Deploy VM from template for K8S worker nodes   
+  - name: deploy k8s worker from template
+    vmware_guest:
+      hostname: "{{ vcenter_ip }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      validate_certs: no
+      datacenter: "{{ vmware_datacenter }}"
+      cluster: "{{ vmware_cluster }}"
+      name: k8s-node1
+      folder: "{{ k8s_vm_folder }}"
+      state: poweredon
+      template: "{{ k8s_template_name }}" 
+      networks:
+      - name: "{{ vm_network }}"
+        ip: "{{ k8s_node1_ip }}"
+        netmask: "{{ k8s_network_netmask }}"
+        gateway: "{{ k8s_network_gateway }}"
+        domain: "{{ domain }}"
+        dns_servers: 
+        - "{{ dns_server }}"
+      wait_for_ip_address: yes
+    delegate_to: localhost
+
+######################## End of VM Deployment Tasks ########################
+
+######################## Start of K8S Cluster Installation and Configuration Tasks ########################
+
+# Add Global DNS entry in /etc/resolv file in all K8S cluster nodes (skip this task if template already has this added)   
+  - name: add global DNS entry in resolv config file
+    blockinfile:
+      path: /etc/resolv.conf
+      insertafter: EOF
+      block: "nameserver 8.8.8.8"
+    delegate_to: kube_cluster1
+
+# Stop and Disable Firewall service in all K8S cluster nodes
+  - name: Stop service firewalld, if started
+    service:
+      name: firewalld
+      state: stopped
+      enabled: no
+    delegate_to: kube_cluster1
+
+# Stop and Disable SELinux on all K8S cluster nodes
+  - name: disable SELinux
+    command: setenforce 0
+    delegate_to: kube_cluster1
+
+  - name: disable SELinux on reboot
+    selinux:
+      state: disabled
+    delegate_to: kube_cluster1
+
+# Disable swap on all K8S cluster nodes
+  - name: disable swap
+    command: swapoff -a
+    delegate_to: kube_cluster1
+
+# Remove swap entry from /etc/fstab from all K8S cluster nodes
+  - name: Remove swapfile from /etc/fstab
+    mount:
+      name: swap
+      fstype: swap
+      state: absent
+    delegate_to: kube_cluster1
+
+# Set net.bridge.bridge-nf-call-ip6tables value to 1 all K8S cluster nodes
+  - name: ensure net.bridge.bridge-nf-call-ip6tables is set to 1
+    sysctl:
+     name: net.bridge.bridge-nf-call-ip6tables
+     value: 1
+     state: present
+    delegate_to: kube_cluster1
+
+# Set net.bridge.bridge-nf-call-iptables value to 1 all K8S cluster nodes
+  - name: ensure net.bridge.bridge-nf-call-iptables is set to 1
+    sysctl:
+     name: net.bridge.bridge-nf-call-iptables
+     value: 1
+     state: present
+    delegate_to: kube_cluster1
+
+# Enable EPEL Repo on all K8S cluster nodes
+  - name: install EPEL Repo
+    yum:
+      name: epel-release 
+      state: present
+      update_cache: true
+    delegate_to: kube_cluster1
+
+# Install and Configure iSCSI on all K8S cluster nodes
+  - name: install iSCSI Utils 
+    yum:
+      name: iscsi-initiator-utils
+      state: present
+      update_cache: true
+    delegate_to: kube_cluster1
+
+  - name: enable node.startup automatic
+    blockinfile:
+      path: /etc/iscsi/iscsid.conf
+      insertafter: "#node.startup = automatic"
+      block: "node.startup = automatic"
+    delegate_to: kube_cluster1
+
+  - name: Configure the iSCSI service to start automatically
+    shell: "systemctl enable iscsid"
+    delegate_to: kube_cluster1
+
+  - name: Start iSCSI service 
+    shell: "systemctl start iscsid"
+    delegate_to: kube_cluster1
+
+  - name: Add storage iSCSI target IP address 
+    shell: "iscsiadm -m discovery -t st -p 172.16.1.11" #replace with iSCSI target IP of storage 
+    ignore_errors: yes
+    delegate_to: kube_cluster1
+
+# Configure Native Multipath on all K8S cluster nodes
+
+  - name: install Device Multipath 
+    yum:
+      name: device-mapper-multipath
+      state: present
+      update_cache: true
+    delegate_to: kube_cluster1
+
+  - name: Enable multipath user friendly names 
+    shell: "mpathconf --enable --user_friendly_names y"
+    delegate_to: kube_cluster1
+
+
+# Install Docker on all K8S cluster nodes using remote repo link (this is to make sure we install recommended Docker version)
+  - name: install Docker from a remote repo
+    yum:
+      name: https://download.docker.com/linux/centos/7/x86_64/stable/Packages/docker-ce-18.06.3.ce-3.el7.x86_64.rpm # this is recommended Docker version for DellEMC CSI
+      state: present
+      update_cache: true
+    delegate_to: kube_cluster1
+
+# Start Docker service on all K8S cluster nodes
+  - name: start Docker
+    service:
+      name: docker
+      enabled: yes
+      state: started
+    delegate_to: kube_cluster1
+
+# Add Kubernetes YUM Repo on all K8S cluster nodes
+  - name: add Kubernetes YUM repository
+    yum_repository:
+      name: Kubernetes
+      description: Kubernetes YUM repository
+      baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+      gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+      gpgcheck: yes
+    delegate_to: kube_cluster1
+
+# Install kubelet and kubeadm version 1.14 on all K8S cluster nodes
+  - name: install kubelet
+    yum:
+      name:
+        - kubelet-1.14.0
+        - kubeadm-1.14.0
+      state: present
+      update_cache: true
+    delegate_to: kube_cluster1
+
+# Start kubelet service on all K8S cluster nodes
+  - name: start kubelet
+    service:
+      name: kubelet
+      enabled: yes
+      state: started
+    delegate_to: kube_cluster1
+
+# Install kubectl version 1.14 on K8S master server 
+  - name: install kubectl
+    yum:
+      name: kubectl-1.14.0
+      state: present
+      allow_downgrade: yes
+    delegate_to: master
+
+# Download Kubernetes config images 
+  - name: Download kubeadm config images 
+    shell: kubeadm config images pull
+    delegate_to: master
+
+# Initialize the Kubernetes cluster 
+  - name: initialize the cluster
+    shell: kubeadm init --pod-network-cidr=10.244.0.0/16 >> cluster_initialized.txt
+    args:
+      chdir: $HOME
+      creates: cluster_initialized.txt
+    delegate_to: master
+
+# Create $HOME/.kube directory
+  - name: create .kube directory
+    become: yes
+    file:
+      path: $HOME/.kube
+      state: directory
+      mode: 0755
+    delegate_to: master
+
+# Copy admin.conf to $HOME/.kube directory
+  - name: copy admin.conf to user's kube config
+    copy:
+      src: /etc/kubernetes/admin.conf
+      dest: $HOME/.kube/config
+      remote_src: yes
+    delegate_to: master
+
+# Install Kubernetes POD network - Flannel in this case
+  - name: install Pod network
+    become: yes
+    shell: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/a70459be0084506e4ec919aa1c114638878db11b/Documentation/kube-flannel.yml >> pod_network_setup.txt
+    args:
+      chdir: $HOME
+      creates: pod_network_setup.txt
+    delegate_to: master
+
+# Join Kubernetes workers to cluster
+  - name: Capture join command
+    shell: kubeadm token create --print-join-command
+    register: kubeadm_join_cmd
+    #delegate_to: "{{ groups['master'][0] }}" - use this in case there are multiple masters
+    delegate_to: master
+
+  - set_fact:
+      kubeadm_join: "{{ kubeadm_join_cmd.stdout }}"
+
+  - debug: var=kubeadm_join # this is optional to display join command in ansible console
+
+  - name: Store join command
+    action: copy content="{{ kubeadm_join }}" dest="/etc/kubernetes/kubeadm-join.command"
+
+  - name: Join worker to k8s cluster
+    shell: "{{ kubeadm_join }} --ignore-preflight-errors=swap"
+    delegate_to: worker
+    ignore_errors: yes
+
+######################## End of K8S Cluster Installation and Configuration Tasks ########################
