@@ -27,7 +27,7 @@ This ansible playbook will help you deploy entire K8S cluster with dependencies 
     k8s_master_ip: 192.168.172.100     - Replace IP address with kubernetes master server IP address you want to use
     k8s_network_netmask: 255.255.255.0 - Replace subnet mask with netmask of kubernetes network
     k8s_network_gateway: 192.168.172.1 - Replace gateway with kubernetes network gateway
-    k8s_node1_ip: 192.168.172.101      - Repalce IP address with kubernetes node IP address
+    k8s_node1_ip: 192.168.172.101      - Replace IP address with kubernetes node IP address
     #k8s_node2_ip: 192.168.1.102
     #k8s_node3_ip: 192.168.1.103
     #k8s_node4_ip: 192.168.1.104
